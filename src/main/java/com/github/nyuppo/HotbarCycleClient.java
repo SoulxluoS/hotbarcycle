@@ -18,6 +18,7 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,12 +48,12 @@ public class HotbarCycleClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         clicker = getClicker();
-
+        var category = KeyBinding.Category.create(Identifier.of("hotbarcycle","keybinds"));
         cycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.hotbarcycle.cycle",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_H,
-                "category.hotbarcycle.keybinds"
+                category
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (cycleKeyBinding.wasPressed()) {
@@ -66,12 +67,12 @@ public class HotbarCycleClient implements ClientModInitializer {
                 "key.hotbarcycle.single_cycle",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_J,
-                "category.hotbarcycle.keybinds"
+                category
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (singleCycleKeyBinding.wasPressed()) {
                 if (client.player != null && client.player.getInventory() != null && !CONFIG.getHoldAndScroll()) {
-                    shiftSingle(client, client.player.getInventory().selectedSlot, Direction.DOWN);
+                    shiftSingle(client, client.player.getInventory().getSelectedSlot(), Direction.DOWN);
                 }
             }
         });
@@ -93,7 +94,6 @@ public class HotbarCycleClient implements ClientModInitializer {
         // invert direction if reverse cycle is enabled
         final Direction direction = requestedDirection.reverse(CONFIG.getReverseCycleDirection());
 
-        @SuppressWarnings("resource")
         ClientPlayerInteractionManager interactionManager = client.interactionManager;
         if (interactionManager == null || client.player == null) {
             return;
@@ -133,7 +133,6 @@ public class HotbarCycleClient implements ClientModInitializer {
         // invert direction if reverse cycle is enabled
         final Direction direction = requestedDirection.reverse(CONFIG.getReverseCycleDirection());
 
-        @SuppressWarnings("resource")
         ClientPlayerInteractionManager interactionManager = client.interactionManager;
         if (interactionManager == null || client.player == null) {
             return;

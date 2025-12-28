@@ -10,19 +10,22 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(Mouse.class)
 public class ScrollCycleMixin {
-    @WrapOperation(method="onMouseScroll", at=@At(value="INVOKE", target="net/minecraft/client/input/Scroller.scrollCycling(DII)I" ))
+    @WrapOperation(
+        method = "onMouseScroll",
+        at = @At(
+            value = "INVOKE",
+            target = "net/minecraft/client/input/Scroller.scrollCycling(DII)I"))
     private int hotbarcycleScrollInHotbar(double scrollAmount, int selectedSlot, int hotbarSize, Operation<Integer> original) {
         final HotbarCycleClient.Direction direction = Math.signum(scrollAmount) < 0
-                ? HotbarCycleClient.Direction.UP
-                : HotbarCycleClient.Direction.DOWN;
+            ? HotbarCycleClient.Direction.UP
+            : HotbarCycleClient.Direction.DOWN;
         if (HotbarCycleClient.getConfig().getHoldAndScroll() && HotbarCycleClient.getCycleKeyBinding().isPressed()) {
             HotbarCycleClient.shiftRows(MinecraftClient.getInstance(), direction);
             return selectedSlot;
         } else if (HotbarCycleClient.getConfig().getHoldAndScroll() && HotbarCycleClient.getSingleCycleKeyBinding().isPressed()) {
             HotbarCycleClient.shiftSingle(MinecraftClient.getInstance(), selectedSlot, direction);
             return selectedSlot;
-        }
-        else
+        } else
             return original.call(scrollAmount, selectedSlot, hotbarSize);
     }
 }

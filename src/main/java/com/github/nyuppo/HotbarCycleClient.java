@@ -24,14 +24,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class HotbarCycleClient implements ClientModInitializer {
+    public static final Logger LOGGER = LoggerFactory.getLogger("hotbarcycle");
+    private static final HotbarCycleConfig CONFIG;
     private static KeyBinding cycleKeyBinding;
     private static KeyBinding singleCycleKeyBinding;
-
-    private static final HotbarCycleConfig CONFIG;
-
     private static Clicker clicker;
 
-    public static final Logger LOGGER = LoggerFactory.getLogger("hotbarcycle");
+    static {
+        if (FabricLoader.getInstance().isModLoaded("cloth-config")) {
+            CONFIG = AutoConfig.register(ClothConfigHotbarCycleConfig.class, GsonConfigSerializer::new).getConfig();
+        } else {
+            CONFIG = new DefaultHotbarCycleConfig();
+        }
+
+    }
 
     public static HotbarCycleConfig getConfig() {
         return CONFIG;
@@ -43,51 +49,6 @@ public class HotbarCycleClient implements ClientModInitializer {
 
     public static KeyBinding getSingleCycleKeyBinding() {
         return singleCycleKeyBinding;
-    }
-
-    @Override
-    public void onInitializeClient() {
-        clicker = getClicker();
-        var category = KeyBinding.Category.create(Identifier.of("hotbarcycle","keybinds"));
-        cycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.hotbarcycle.cycle",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_H,
-                category
-        ));
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (cycleKeyBinding.wasPressed()) {
-                if (client.player != null && !CONFIG.getHoldAndScroll()) {
-                    shiftRows(client, Direction.DOWN);
-                }
-            }
-        });
-
-        singleCycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.hotbarcycle.single_cycle",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_J,
-                category
-        ));
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (singleCycleKeyBinding.wasPressed()) {
-                if (client.player != null && client.player.getInventory() != null && !CONFIG.getHoldAndScroll()) {
-                    shiftSingle(client, client.player.getInventory().getSelectedSlot(), Direction.DOWN);
-                }
-            }
-        });
-    }
-
-    public enum Direction {
-        UP,
-        DOWN;
-
-        public Direction reverse(final boolean reversed) {
-            return switch (this) {
-                case UP -> !reversed ? UP : DOWN;
-                case DOWN -> !reversed ? DOWN : UP;
-            };
-        }
     }
 
     public static void shiftRows(MinecraftClient client, final Direction requestedDirection) {
@@ -155,7 +116,48 @@ public class HotbarCycleClient implements ClientModInitializer {
         }
     }
 
-    private static Clicker getClicker() {
+    public static void shiftRows(MinecraftClient client, int direction) {
+        if (client.interactionManager == null || client.player == null) {
+            return;
+        }
+
+        int[] swapMap = SwapMap.GetInventorySwapMap(direction);
+        for (int x = 0; x < 9; ++x) {
+            for (int i = 0; i < 4 && swapMap[x] != x; ++i) {
+                int from = x;
+                int to = swapMap[x];
+
+                clicker.swap(client, to, from);
+                swapMap[from] = swapMap[to];
+                swapMap[to] = to;
+            }
+        }
+
+        if (CONFIG.getPlaySound()) {
+            client.player.playSoundToPlayer(SoundEvents.ITEM_BOOK_PAGE_TURN, SoundCategory.MASTER, 0.5f, 1.5f);
+        }
+    }
+
+    public static void shiftSingle(MinecraftClient client, int x, int direction) {
+        if (client.interactionManager == null || client.player == null) {
+            return;
+        }
+
+        int[] swapMap = SwapMap.GetRowSwapMap(direction);
+        for (int i = 0; i < 4 && swapMap[0] != 0; ++i) {
+            int to = swapMap[0];
+
+            clicker.swap(client, (to * 9) + x, x);
+            swapMap[0] = swapMap[to];
+            swapMap[to] = to;
+        }
+
+        if (CONFIG.getPlaySound()) {
+            client.player.playSoundToPlayer(SoundEvents.ITEM_BOOK_PAGE_TURN, SoundCategory.MASTER, 0.5f, 1.5f);
+        }
+    }
+
+    public static Clicker getClicker() {
         if (FabricLoader.getInstance().isModLoaded("inventoryprofilesnext")) {
             LOGGER.info("Inventory Profiles Next was found, switching to compatible clicker!");
             return new IPNClicker();
@@ -164,7 +166,7 @@ public class HotbarCycleClient implements ClientModInitializer {
         return new VanillaClicker();
     }
 
-    private static boolean isColumnEnabled(int columnIndex) {
+    public static boolean isColumnEnabled(int columnIndex) {
         return switch (columnIndex) {
             case 0 -> CONFIG.getEnableColumn0();
             case 1 -> CONFIG.getEnableColumn1();
@@ -179,12 +181,60 @@ public class HotbarCycleClient implements ClientModInitializer {
         };
     }
 
-    static {
-        if (FabricLoader.getInstance().isModLoaded("cloth-config")) {
-            CONFIG = AutoConfig.register(ClothConfigHotbarCycleConfig.class, GsonConfigSerializer::new).getConfig();
-        } else {
-            CONFIG = new DefaultHotbarCycleConfig();
-        }
+    public static boolean isRowEnabled(int y) {
+        return switch (y) {
+            // The mix-up is intentional; Row 1 (bottom) in the config is the
+            // last row (y=3) in the slot array.
+            case 1 -> CONFIG.getEnableRow3();
+            case 2 -> CONFIG.getEnableRow2();
+            case 3 -> CONFIG.getEnableRow1();
+            case 0 -> true;
+            default -> false;
+        };
+    }
 
+    @Override
+    public void onInitializeClient() {
+        clicker = getClicker();
+        var category = KeyBinding.Category.create(Identifier.of("hotbarcycle", "keybinds"));
+        cycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+            "key.hotbarcycle.cycle",
+            InputUtil.Type.KEYSYM,
+            GLFW.GLFW_KEY_H,
+            category
+        ));
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (cycleKeyBinding.wasPressed()) {
+                if (client.player != null && !CONFIG.getHoldAndScroll()) {
+                    shiftRows(client, Direction.DOWN);
+                }
+            }
+        });
+
+        singleCycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+            "key.hotbarcycle.single_cycle",
+            InputUtil.Type.KEYSYM,
+            GLFW.GLFW_KEY_J,
+            category
+        ));
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (singleCycleKeyBinding.wasPressed()) {
+                if (client.player != null && client.player.getInventory() != null && !CONFIG.getHoldAndScroll()) {
+                    shiftSingle(client, client.player.getInventory().getSelectedSlot(), Direction.DOWN);
+                }
+            }
+        });
+    }
+
+    public enum Direction {
+        UP,
+        DOWN;
+
+        public Direction reverse(final boolean reversed) {
+            return switch (this) {
+                case UP -> !reversed ? UP : DOWN;
+                case DOWN -> !reversed ? DOWN : UP;
+            };
+        }
     }
 }

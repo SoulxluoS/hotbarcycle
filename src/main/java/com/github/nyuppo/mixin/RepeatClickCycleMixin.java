@@ -1,17 +1,14 @@
 package com.github.nyuppo.mixin;
 
 import com.github.nyuppo.HotbarCycleClient;
-import com.github.nyuppo.config.HotbarCycleConfig;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Minecraft.class)
-public class RepeatClickCycleMixin {
+public abstract class RepeatClickCycleMixin {
     @Final
     @Mutable
     @Shadow
@@ -33,6 +30,9 @@ public class RepeatClickCycleMixin {
     @Nullable
     public ClientLevel level;
 
+    @Shadow
+    public abstract boolean hasControlDown();
+
     @Inject(
         method = "handleKeybinds",
         at = @At("HEAD"))
@@ -45,48 +45,42 @@ public class RepeatClickCycleMixin {
         }
     }
 
-    @WrapOperation(
+    @Inject(
         method = "pickBlock",
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;handlePickItemFromBlock(Lnet/minecraft/core/BlockPos;Z)V"))
-    private void cyclePickedItem(MultiPlayerGameMode instance, BlockPos pos, boolean includeData, Operation<Void> original) {
-        if (level == null) {
-            original.call(instance, pos, includeData);
-            return;
+    private void cyclePickedItem(CallbackInfo ci, @Local BlockHitResult hitResult) {
+        if (HotbarCycleClient.getConfig().getCycleWhenPickingBlock() && level != null) {
+            var pickStack = level.getBlockState(hitResult.getBlockPos()).getCloneItemStack(level, hitResult.getBlockPos(), hasControlDown());
+            pickStackCycle(pickStack);
         }
-        var pickedStack = level.getBlockState(pos).getCloneItemStack(level, pos, includeData);
-        pickStackCycle(pickedStack);
-        original.call(instance, pos, includeData);
     }
 
-    @WrapOperation(
+    @Inject(
         method = "pickBlock",
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;handlePickItemFromEntity(Lnet/minecraft/world/entity/Entity;Z)V"))
-    private void cyclePickedItem(MultiPlayerGameMode instance, Entity entity, boolean includeData, Operation<Void> original) {
-        var pickedStack = entity.getPickResult();
-        if (pickedStack == null) {
-            return;
+    private void cyclePickedItem(CallbackInfo ci, @Local EntityHitResult hitResult) {
+        if (HotbarCycleClient.getConfig().getCycleWhenPickingBlock()) {
+            var pickStack = hitResult.getEntity().getPickResult();
+            pickStackCycle(pickStack);
         }
-        pickStackCycle(pickedStack);
-        original.call(instance, entity, includeData);
     }
 
     @Unique
     private void pickStackCycle(ItemStack pickedStack) {
-        if (player == null) {
+        if (player == null || pickedStack == null || pickedStack.isEmpty()) {
             return;
         }
         int slot = player.getInventory().findSlotMatchingItem(pickedStack);
         if (slot == -1) {
             return;
         }
-        final HotbarCycleConfig config = HotbarCycleClient.getConfig();
         int x, y;
 
-        if (8 < slot && config.getCycleWhenPickingBlock() && HotbarCycleClient.isColumnEnabled(x = slot % 9) && HotbarCycleClient.isRowEnabled(y = slot / 9)) {
+        if (8 < slot && HotbarCycleClient.isColumnEnabled(x = slot % 9) && HotbarCycleClient.isRowEnabled(y = slot / 9)) {
             final Minecraft client = (Minecraft) (Object) this;
             int direction = -1;
             for (int i = 1; i < y; ++i) {
@@ -95,7 +89,7 @@ public class RepeatClickCycleMixin {
                 }
             }
 
-            if (config.getPickCyclesWholeHotbar()) {
+            if (HotbarCycleClient.getConfig().getPickCyclesWholeHotbar()) {
                 HotbarCycleClient.shiftRows(client, direction);
             } else {
                 HotbarCycleClient.shiftSingle(client, x, direction);

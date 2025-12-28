@@ -4,69 +4,69 @@ import com.github.nyuppo.HotbarCycleClient;
 import com.github.nyuppo.config.HotbarCycleConfig;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.network.ClientPlayerInteractionManager;
-import net.minecraft.client.option.GameOptions;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.Entity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(MinecraftClient.class)
+@Mixin(Minecraft.class)
 public class RepeatClickCycleMixin {
     @Final
     @Mutable
     @Shadow
-    public GameOptions options;
+    public Options options;
 
     @Shadow
     @Nullable
-    public ClientPlayerEntity player;
+    public LocalPlayer player;
 
     @Shadow
     @Nullable
-    public ClientWorld world;
+    public ClientLevel level;
 
     @Inject(
-        method = "handleInputEvents",
+        method = "handleKeybinds",
         at = @At("HEAD"))
     private void repeatClickCycleMixin(CallbackInfo ci) {
         if (player == null) {
             return;
         }
-        if (HotbarCycleClient.getConfig().getRepeatSlotToCycle() && this.options.hotbarKeys[this.player.getInventory().getSelectedSlot()].wasPressed()) {
-            HotbarCycleClient.shiftSingle(((MinecraftClient) (Object) this), this.player.getInventory().getSelectedSlot(), HotbarCycleClient.Direction.DOWN);
+        if (HotbarCycleClient.getConfig().getRepeatSlotToCycle() && this.options.keyHotbarSlots[this.player.getInventory().getSelectedSlot()].consumeClick()) {
+            HotbarCycleClient.shiftSingle(((Minecraft) (Object) this), this.player.getInventory().getSelectedSlot(), HotbarCycleClient.Direction.DOWN);
         }
     }
 
     @WrapOperation(
-        method = "doItemPick",
+        method = "pickBlock",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/client/network/ClientPlayerInteractionManager;pickItemFromBlock(Lnet/minecraft/util/math/BlockPos;Z)V"))
-    private void cyclePickedItem(ClientPlayerInteractionManager instance, BlockPos pos, boolean includeData, Operation<Void> original) {
-        if (world == null) {
+            target = "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;handlePickItemFromBlock(Lnet/minecraft/core/BlockPos;Z)V"))
+    private void cyclePickedItem(MultiPlayerGameMode instance, BlockPos pos, boolean includeData, Operation<Void> original) {
+        if (level == null) {
             original.call(instance, pos, includeData);
             return;
         }
-        var pickedStack = world.getBlockState(pos).getPickStack(world, pos, includeData);
+        var pickedStack = level.getBlockState(pos).getCloneItemStack(level, pos, includeData);
         pickStackCycle(pickedStack);
         original.call(instance, pos, includeData);
     }
 
     @WrapOperation(
-        method = "doItemPick",
+        method = "pickBlock",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/client/network/ClientPlayerInteractionManager;pickItemFromEntity(Lnet/minecraft/entity/Entity;Z)V"))
-    private void cyclePickedItem(ClientPlayerInteractionManager instance, Entity entity, boolean includeData, Operation<Void> original) {
-        var pickedStack = entity.getPickBlockStack();
+            target = "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;handlePickItemFromEntity(Lnet/minecraft/world/entity/Entity;Z)V"))
+    private void cyclePickedItem(MultiPlayerGameMode instance, Entity entity, boolean includeData, Operation<Void> original) {
+        var pickedStack = entity.getPickResult();
         if (pickedStack == null) {
             return;
         }
@@ -79,7 +79,7 @@ public class RepeatClickCycleMixin {
         if (player == null) {
             return;
         }
-        int slot = player.getInventory().getSlotWithStack(pickedStack);
+        int slot = player.getInventory().findSlotMatchingItem(pickedStack);
         if (slot == -1) {
             return;
         }
@@ -87,7 +87,7 @@ public class RepeatClickCycleMixin {
         int x, y;
 
         if (8 < slot && config.getCycleWhenPickingBlock() && HotbarCycleClient.isColumnEnabled(x = slot % 9) && HotbarCycleClient.isRowEnabled(y = slot / 9)) {
-            final MinecraftClient client = (MinecraftClient) (Object) this;
+            final Minecraft client = (Minecraft) (Object) this;
             int direction = -1;
             for (int i = 1; i < y; ++i) {
                 if (HotbarCycleClient.isRowEnabled(i)) {

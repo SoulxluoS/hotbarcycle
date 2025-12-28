@@ -6,19 +6,19 @@ import com.github.nyuppo.compat.VanillaClicker;
 import com.github.nyuppo.config.ClothConfigHotbarCycleConfig;
 import com.github.nyuppo.config.DefaultHotbarCycleConfig;
 import com.github.nyuppo.config.HotbarCycleConfig;
+import com.mojang.blaze3d.platform.InputConstants;
 import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.serializer.GsonConfigSerializer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayerInteractionManager;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,8 +26,8 @@ import org.slf4j.LoggerFactory;
 public class HotbarCycleClient implements ClientModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("hotbarcycle");
     private static final HotbarCycleConfig CONFIG;
-    private static KeyBinding cycleKeyBinding;
-    private static KeyBinding singleCycleKeyBinding;
+    private static KeyMapping cycleKeyBinding;
+    private static KeyMapping singleCycleKeyBinding;
     private static Clicker clicker;
 
     static {
@@ -43,19 +43,19 @@ public class HotbarCycleClient implements ClientModInitializer {
         return CONFIG;
     }
 
-    public static KeyBinding getCycleKeyBinding() {
+    public static KeyMapping getCycleKeyBinding() {
         return cycleKeyBinding;
     }
 
-    public static KeyBinding getSingleCycleKeyBinding() {
+    public static KeyMapping getSingleCycleKeyBinding() {
         return singleCycleKeyBinding;
     }
 
-    public static void shiftRows(MinecraftClient client, final Direction requestedDirection) {
+    public static void shiftRows(Minecraft client, final Direction requestedDirection) {
         // invert direction if reverse cycle is enabled
         final Direction direction = requestedDirection.reverse(CONFIG.getReverseCycleDirection());
 
-        ClientPlayerInteractionManager interactionManager = client.interactionManager;
+        MultiPlayerGameMode interactionManager = client.gameMode;
         if (interactionManager == null || client.player == null) {
             return;
         }
@@ -86,15 +86,15 @@ public class HotbarCycleClient implements ClientModInitializer {
         }
 
         if (CONFIG.getPlaySound()) {
-            client.player.playSoundToPlayer(SoundEvents.ITEM_BOOK_PAGE_TURN, SoundCategory.MASTER, 0.5f, 1.5f);
+            client.player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, 1.5f);
         }
     }
 
-    public static void shiftSingle(MinecraftClient client, int hotbarSlot, final Direction requestedDirection) {
+    public static void shiftSingle(Minecraft client, int hotbarSlot, final Direction requestedDirection) {
         // invert direction if reverse cycle is enabled
         final Direction direction = requestedDirection.reverse(CONFIG.getReverseCycleDirection());
 
-        ClientPlayerInteractionManager interactionManager = client.interactionManager;
+        MultiPlayerGameMode interactionManager = client.gameMode;
         if (interactionManager == null || client.player == null) {
             return;
         }
@@ -112,12 +112,12 @@ public class HotbarCycleClient implements ClientModInitializer {
         }
 
         if (CONFIG.getPlaySound()) {
-            client.player.playSoundToPlayer(SoundEvents.ITEM_BOOK_PAGE_TURN, SoundCategory.MASTER, 0.5f, 1.8f);
+            client.player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, 1.8f);
         }
     }
 
-    public static void shiftRows(MinecraftClient client, int direction) {
-        if (client.interactionManager == null || client.player == null) {
+    public static void shiftRows(Minecraft client, int direction) {
+        if (client.gameMode == null || client.player == null) {
             return;
         }
 
@@ -134,12 +134,12 @@ public class HotbarCycleClient implements ClientModInitializer {
         }
 
         if (CONFIG.getPlaySound()) {
-            client.player.playSoundToPlayer(SoundEvents.ITEM_BOOK_PAGE_TURN, SoundCategory.MASTER, 0.5f, 1.5f);
+            client.player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, 1.5f);
         }
     }
 
-    public static void shiftSingle(MinecraftClient client, int x, int direction) {
-        if (client.interactionManager == null || client.player == null) {
+    public static void shiftSingle(Minecraft client, int x, int direction) {
+        if (client.gameMode == null || client.player == null) {
             return;
         }
 
@@ -153,7 +153,7 @@ public class HotbarCycleClient implements ClientModInitializer {
         }
 
         if (CONFIG.getPlaySound()) {
-            client.player.playSoundToPlayer(SoundEvents.ITEM_BOOK_PAGE_TURN, SoundCategory.MASTER, 0.5f, 1.5f);
+            client.player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, 1.5f);
         }
     }
 
@@ -196,29 +196,29 @@ public class HotbarCycleClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         clicker = getClicker();
-        var category = KeyBinding.Category.create(Identifier.of("hotbarcycle", "keybinds"));
-        cycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        var category = KeyMapping.Category.register(ResourceLocation.fromNamespaceAndPath("hotbarcycle", "keybinds"));
+        cycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyMapping(
             "key.hotbarcycle.cycle",
-            InputUtil.Type.KEYSYM,
+            InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_H,
             category
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (cycleKeyBinding.wasPressed()) {
+            while (cycleKeyBinding.consumeClick()) {
                 if (client.player != null && !CONFIG.getHoldAndScroll()) {
                     shiftRows(client, Direction.DOWN);
                 }
             }
         });
 
-        singleCycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        singleCycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyMapping(
             "key.hotbarcycle.single_cycle",
-            InputUtil.Type.KEYSYM,
+            InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_J,
             category
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (singleCycleKeyBinding.wasPressed()) {
+            while (singleCycleKeyBinding.consumeClick()) {
                 if (client.player != null && client.player.getInventory() != null && !CONFIG.getHoldAndScroll()) {
                     shiftSingle(client, client.player.getInventory().getSelectedSlot(), Direction.DOWN);
                 }

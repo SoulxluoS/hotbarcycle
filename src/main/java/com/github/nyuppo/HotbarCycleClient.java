@@ -16,7 +16,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import org.lwjgl.glfw.GLFW;
@@ -85,9 +85,7 @@ public class HotbarCycleClient implements ClientModInitializer {
             }
         }
 
-        if (CONFIG.getPlaySound()) {
-            client.player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, 1.5f);
-        }
+        playSwapSound(client, 1.5F);
     }
 
     public static void shiftSingle(Minecraft client, int hotbarSlot, final Direction requestedDirection) {
@@ -111,8 +109,12 @@ public class HotbarCycleClient implements ClientModInitializer {
             clicker.swap(client, (direction != Direction.DOWN ? 27 : 9) + hotbarSlot, hotbarSlot);
         }
 
-        if (CONFIG.getPlaySound()) {
-            client.player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, 1.8f);
+        playSwapSound(client, 1.8F);
+    }
+
+    private static void playSwapSound(Minecraft client, float pitch) {
+        if (CONFIG.getPlaySound() && client.level != null && client.player != null) {
+            client.level.playLocalSound(client.player, SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, pitch);
         }
     }
 
@@ -124,6 +126,7 @@ public class HotbarCycleClient implements ClientModInitializer {
         int[] swapMap = SwapMap.GetInventorySwapMap(direction);
         for (int x = 0; x < 9; ++x) {
             for (int i = 0; i < 4 && swapMap[x] != x; ++i) {
+                @SuppressWarnings("UnnecessaryLocalVariable")
                 int from = x;
                 int to = swapMap[x];
 
@@ -133,9 +136,7 @@ public class HotbarCycleClient implements ClientModInitializer {
             }
         }
 
-        if (CONFIG.getPlaySound()) {
-            client.player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, 1.5f);
-        }
+        playSwapSound(client, 1.5F);
     }
 
     public static void shiftSingle(Minecraft client, int x, int direction) {
@@ -152,9 +153,7 @@ public class HotbarCycleClient implements ClientModInitializer {
             swapMap[to] = to;
         }
 
-        if (CONFIG.getPlaySound()) {
-            client.player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.MASTER, 0.5f, 1.5f);
-        }
+        playSwapSound(client, 1.5F);
     }
 
     public static Clicker getClicker() {
@@ -196,7 +195,7 @@ public class HotbarCycleClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         clicker = getClicker();
-        var category = KeyMapping.Category.register(ResourceLocation.fromNamespaceAndPath("hotbarcycle", "keybinds"));
+        var category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath("hotbarcycle", "keybinds"));
         cycleKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyMapping(
             "key.hotbarcycle.cycle",
             InputConstants.Type.KEYSYM,
@@ -219,7 +218,7 @@ public class HotbarCycleClient implements ClientModInitializer {
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (singleCycleKeyBinding.consumeClick()) {
-                if (client.player != null && client.player.getInventory() != null && !CONFIG.getHoldAndScroll()) {
+                if (client.player != null && !CONFIG.getHoldAndScroll()) {
                     shiftSingle(client, client.player.getInventory().getSelectedSlot(), Direction.DOWN);
                 }
             }

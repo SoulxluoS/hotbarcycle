@@ -9,7 +9,7 @@ public class VanillaClicker implements Clicker {
     public void swap(Minecraft client, int from, int to) {
         MultiPlayerGameMode interactionManager = client.gameMode;
 
-        if (interactionManager != null && client.player != null && client.player.getInventory() != null) {
+        if (interactionManager != null && client.player != null) {
             interactionManager.handleInventoryMouseClick(client.player.inventoryMenu.containerId, from, to, ClickType.SWAP, client.player);
         }
     }
